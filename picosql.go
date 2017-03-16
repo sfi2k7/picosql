@@ -20,6 +20,8 @@ type Sql struct {
 	db      *sql.DB
 	cs      string
 	driver  string
+	tm      tagMapper
+	isClone bool
 }
 
 func (m *Sql) open() error {
@@ -30,11 +32,11 @@ func (m *Sql) open() error {
 	db, err := sql.Open(m.driver, m.cs)
 	if err != nil {
 		m.IsOpen = false
-		return nil
+		return err
 	}
 
-	db.SetMaxIdleConns(1)
-	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(2)
+	db.SetMaxOpenConns(2)
 
 	m.db = db
 	err = db.Ping()
@@ -44,6 +46,7 @@ func (m *Sql) open() error {
 	}
 
 	m.IsOpen = true
+	m.tm = make(tagMapper)
 	return nil
 }
 
@@ -78,12 +81,42 @@ func (m *Sql) Insert(query string, args ...interface{}) (int64, error) {
 		return 0, err
 	}
 
-	lastId, err := res.LastInsertId()
+	lastID, err := res.LastInsertId()
 	if err != nil {
 		return 0, err
 	}
 
-	return lastId, nil
+	return lastID, nil
+}
+
+func (m *Sql) Exec(query string, args ...interface{}) (sql.Result, error) {
+	m.open()
+
+	if !m.IsOpen {
+		return nil, connectionError
+	}
+
+	return m.db.Exec(query, args...)
+}
+
+func (m *Sql) Query(query string, args ...interface{}) (sql.Rows, error) {
+	m.open()
+
+	if !m.IsOpen {
+		return sql.Rows{}, connectionError
+	}
+
+	return m.Query(query, args...)
+}
+
+func (m *Sql) QueryRow(query string, args ...interface{}) *sql.Row {
+	m.open()
+
+	if !m.IsOpen {
+		return nil
+	}
+
+	return m.db.QueryRow(query, args...)
 }
 
 func (m *Sql) Update(query string, args ...interface{}) (int64, error) {
@@ -230,29 +263,37 @@ func (m *Sql) Get(target interface{}, query string, args ...interface{}) error {
 
 	v := reflect.ValueOf(target)
 	v = v.Elem()
-	t := v.Type()
+	tm := m.tm.get(target)
+	//t := v.Type()
 
 	for i, c := range columns {
 		cv := *(result[i].(*interface{}))
-		var field reflect.Value
-		for x := 0; x < v.NumField(); x++ {
-			tag := t.Field(x).Tag.Get("db")
-			if len(tag) == 0 {
-				//fmt.Println("Tag is 0")
-				continue
-			}
-			splitted := strings.Split(tag, ",")
-			if len(splitted) == 0 {
-				continue
-			}
+		fn, ok := tm[c]
 
-			if c != splitted[0] {
-				continue
-			}
-
-			field = v.Field(i)
-			break
+		if !ok {
+			continue
 		}
+
+		field := v.FieldByName(fn)
+
+		// for x := 0; x < v.NumField(); x++ {
+		// 	tag := t.Field(x).Tag.Get("db")
+		// 	if len(tag) == 0 {
+		// 		//fmt.Println("Tag is 0")
+		// 		continue
+		// 	}
+		// 	splitted := strings.Split(tag, ",")
+		// 	if len(splitted) == 0 {
+		// 		continue
+		// 	}
+
+		// 	if c != splitted[0] {
+		// 		continue
+		// 	}
+
+		// 	field = v.Field(i)
+		// 	break
+		// }
 
 		if !field.IsValid() {
 			continue
@@ -275,6 +316,89 @@ func (m *Sql) Get(target interface{}, query string, args ...interface{}) error {
 	}
 
 	return nil
+}
+
+func (m *Sql) Slice(query string, args ...interface{}) ([]interface{}, error) {
+	m.open()
+
+	if !m.IsOpen {
+		return nil, connectionError
+	}
+
+	res, err := m.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+
+	defer res.Close()
+	if !res.Next() {
+		return nil, errors.New("No result in result set")
+	}
+
+	columns, err := res.Columns()
+	if err != nil {
+		return nil, err
+	}
+
+	rs := make([]interface{}, len(columns))
+	result := make([]interface{}, len(columns))
+
+	for x := 0; x < len(result); x++ {
+		result[x] = new(interface{})
+	}
+
+	err = res.Scan(result...)
+
+	if err != nil {
+		return nil, err
+	}
+
+	for i := range columns {
+		rs[i] = *(result[i].(*interface{}))
+	}
+	return rs, nil
+}
+
+func (m *Sql) Slices(query string, args ...interface{}) ([][]interface{}, error) {
+	m.open()
+
+	if !m.IsOpen {
+		return nil, connectionError
+	}
+
+	res, err := m.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+
+	defer res.Close()
+	var scs [][]interface{}
+
+	for res.Next() {
+		columns, err := res.Columns()
+		if err != nil {
+			return nil, err
+		}
+
+		sc := make([]interface{}, len(columns))
+		result := make([]interface{}, len(columns))
+
+		for x := 0; x < len(result); x++ {
+			result[x] = new(interface{})
+		}
+
+		err = res.Scan(result...)
+		if err != nil {
+			return nil, err
+		}
+
+		for i := range columns {
+			sc[i] = *(result[i].(*interface{}))
+		}
+		scs = append(scs, sc)
+	}
+
+	return scs, nil
 }
 
 func (m *Sql) Map(query string, args ...interface{}) (map[string]interface{}, error) {
@@ -368,11 +492,20 @@ func (m *Sql) Ping() error {
 }
 
 func (m *Sql) Close() {
+	if m.isClone {
+		m.IsOpen = false
+		return
+	}
 
 	if m.IsOpen {
 		m.db.Close()
 	}
 	m.db = nil
+}
+
+func (m *Sql) Clone() *Sql {
+	s := &Sql{IsOpen: m.IsOpen, cs: m.cs, db: m.db, retries: m.retries, tm: m.tm, isClone: true}
+	return s
 }
 
 func New(driver, cs string) (*Sql, error) {
