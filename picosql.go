@@ -1,4 +1,4 @@
-package mssql
+package picosql
 
 import (
 	"database/sql"
@@ -6,8 +6,6 @@ import (
 	"reflect"
 	"strings"
 	"time"
-
-	_ "github.com/denisenkom/go-mssqldb"
 )
 
 const maxRetries = 3
@@ -16,36 +14,40 @@ var (
 	connectionError = errors.New("No Connection is available")
 )
 
-type MSSql struct {
+type Sql struct {
 	IsOpen  bool
 	retries int
 	db      *sql.DB
 	cs      string
+	driver  string
 }
 
-func (m *MSSql) open() {
+func (m *Sql) open() error {
 	if m.IsOpen && m.db.Ping() == nil {
-		return
+		return nil
 	}
 
-	db, err := sql.Open("mssql", m.cs)
+	db, err := sql.Open(m.driver, m.cs)
 	if err != nil {
 		m.IsOpen = false
+		return nil
 	}
+
 	db.SetMaxIdleConns(1)
 	db.SetMaxOpenConns(1)
 
 	m.db = db
-
-	if db.Ping() != nil {
+	err = db.Ping()
+	if err != nil {
 		m.IsOpen = false
-		return
+		return err
 	}
 
 	m.IsOpen = true
+	return nil
 }
 
-func (m *MSSql) Count(query string, args ...interface{}) (int64, error) {
+func (m *Sql) Count(query string, args ...interface{}) (int64, error) {
 
 	m.open()
 
@@ -64,7 +66,7 @@ func (m *MSSql) Count(query string, args ...interface{}) (int64, error) {
 	return count, nil
 }
 
-func (m *MSSql) Insert(query string, args ...interface{}) (int64, error) {
+func (m *Sql) Insert(query string, args ...interface{}) (int64, error) {
 	m.open()
 
 	if !m.IsOpen {
@@ -84,7 +86,7 @@ func (m *MSSql) Insert(query string, args ...interface{}) (int64, error) {
 	return lastId, nil
 }
 
-func (m *MSSql) Update(query string, args ...interface{}) (int64, error) {
+func (m *Sql) Update(query string, args ...interface{}) (int64, error) {
 	m.open()
 
 	if !m.IsOpen {
@@ -104,7 +106,7 @@ func (m *MSSql) Update(query string, args ...interface{}) (int64, error) {
 	return affected, nil
 }
 
-func (m *MSSql) Select(targets interface{}, query string, args ...interface{}) error {
+func (m *Sql) Select(targets interface{}, query string, args ...interface{}) error {
 	m.open()
 
 	if !m.IsOpen {
@@ -192,7 +194,7 @@ func (m *MSSql) Select(targets interface{}, query string, args ...interface{}) e
 	return nil
 }
 
-func (m *MSSql) Get(target interface{}, query string, args ...interface{}) error {
+func (m *Sql) Get(target interface{}, query string, args ...interface{}) error {
 	m.open()
 
 	if !m.IsOpen {
@@ -275,7 +277,7 @@ func (m *MSSql) Get(target interface{}, query string, args ...interface{}) error
 	return nil
 }
 
-func (m *MSSql) Map(query string, args ...interface{}) (map[string]interface{}, error) {
+func (m *Sql) Map(query string, args ...interface{}) (map[string]interface{}, error) {
 	m.open()
 
 	if !m.IsOpen {
@@ -316,7 +318,7 @@ func (m *MSSql) Map(query string, args ...interface{}) (map[string]interface{}, 
 	return mp, nil
 }
 
-func (m *MSSql) Maps(query string, args ...interface{}) ([]map[string]interface{}, error) {
+func (m *Sql) Maps(query string, args ...interface{}) ([]map[string]interface{}, error) {
 	m.open()
 
 	if !m.IsOpen {
@@ -359,13 +361,13 @@ func (m *MSSql) Maps(query string, args ...interface{}) ([]map[string]interface{
 	return mps, nil
 }
 
-func (m *MSSql) Ping() error {
+func (m *Sql) Ping() error {
 	m.open()
 
 	return m.db.Ping()
 }
 
-func (m *MSSql) Close() {
+func (m *Sql) Close() {
 
 	if m.IsOpen {
 		m.db.Close()
@@ -373,6 +375,7 @@ func (m *MSSql) Close() {
 	m.db = nil
 }
 
-func New(cs string) *MSSql {
-	return &MSSql{cs: cs}
+func New(driver, cs string) (*Sql, error) {
+	s := &Sql{cs: cs, driver: driver}
+	return s, s.open()
 }
