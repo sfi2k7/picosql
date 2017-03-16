@@ -10,8 +10,8 @@ type tagMapper map[string]map[string]string
 
 var tagHelperLock sync.Mutex
 
-func (tm tagMapper) get(target interface{}) map[string]string {
-	tn := reflect.TypeOf(target).Elem()
+func (tm tagMapper) get(target reflect.Type) map[string]string {
+	tn := target.Name()
 	if !tm.has(target) {
 		tagHelperLock.Lock()
 
@@ -19,11 +19,11 @@ func (tm tagMapper) get(target interface{}) map[string]string {
 
 		tagHelperLock.Unlock()
 	}
-	return tm[tn.Name()]
+	return tm[tn]
 }
 
-func (tm tagMapper) build(target interface{}) {
-	t := reflect.TypeOf(target).Elem()
+func (tm tagMapper) build(target reflect.Type) {
+	t := target
 	tname := t.Name()
 
 	m := make(map[string]string)
@@ -44,8 +44,8 @@ func (tm tagMapper) build(target interface{}) {
 	tm[tname] = m
 }
 
-func (tm tagMapper) has(target interface{}) bool {
-	name := reflect.TypeOf(target).Name()
+func (tm tagMapper) has(target reflect.Type) bool {
+	name := target.Name()
 	_, ok := tm[name]
 	return ok
 }

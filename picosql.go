@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"errors"
 	"reflect"
-	"strings"
 	"time"
 )
 
@@ -156,6 +155,7 @@ func (m *Sql) Select(targets interface{}, query string, args ...interface{}) err
 	sliceValue := reflect.ValueOf(targets).Elem()
 	itemType := sliceValue.Type()
 	elementType := itemType.Elem()
+	tm := m.tm.get(elementType.Elem())
 
 	for res.Next() {
 		columns, err := res.Columns()
@@ -180,28 +180,33 @@ func (m *Sql) Select(targets interface{}, query string, args ...interface{}) err
 		//v := SetAble // reflect.ValueOf(target)
 		//v = v.Elem()
 		//fmt.Println("V", v)
-		t := v.Type()
+		//t := v.Type()
 
 		for i, c := range columns {
 			cv := *(result[i].(*interface{}))
 			var field reflect.Value
-			for x := 0; x < v.NumField(); x++ {
-				tag := t.Field(x).Tag.Get("db")
-				if len(tag) == 0 {
-					continue
-				}
-				splitted := strings.Split(tag, ",")
-				if len(splitted) == 0 {
-					continue
-				}
-
-				if c != splitted[0] {
-					continue
-				}
-
-				field = v.Field(i)
-				break
+			fn, ok := tm[c]
+			if !ok {
+				continue
 			}
+			field = v.FieldByName(fn)
+			// for x := 0; x < v.NumField(); x++ {
+			// 	tag := t.Field(x).Tag.Get("db")
+			// 	if len(tag) == 0 {
+			// 		continue
+			// 	}
+			// 	splitted := strings.Split(tag, ",")
+			// 	if len(splitted) == 0 {
+			// 		continue
+			// 	}
+
+			// 	if c != splitted[0] {
+			// 		continue
+			// 	}
+
+			// 	field = v.Field(i)
+			// 	break
+			// }
 
 			if !field.IsValid() {
 				continue
@@ -263,9 +268,8 @@ func (m *Sql) Get(target interface{}, query string, args ...interface{}) error {
 
 	v := reflect.ValueOf(target)
 	v = v.Elem()
-	tm := m.tm.get(target)
-	//t := v.Type()
-
+	t := v.Type()
+	tm := m.tm.get(t)
 	for i, c := range columns {
 		cv := *(result[i].(*interface{}))
 		fn, ok := tm[c]
@@ -494,6 +498,10 @@ func (m *Sql) Ping() error {
 func (m *Sql) Close() {
 	if m.isClone {
 		m.IsOpen = false
+		m.cs = ""
+		m.db = nil
+		m.driver = ""
+		m.tm = nil
 		return
 	}
 
