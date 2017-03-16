@@ -36,6 +36,7 @@ func (m *Sql) open() error {
 
 	db.SetMaxIdleConns(2)
 	db.SetMaxOpenConns(2)
+	db.SetConnMaxLifetime(time.Second * 5)
 
 	m.db = db
 	err = db.Ping()
@@ -177,10 +178,6 @@ func (m *Sql) Select(targets interface{}, query string, args ...interface{}) err
 
 		target := reflect.New(elementType.Elem())
 		v := target.Elem()
-		//v := SetAble // reflect.ValueOf(target)
-		//v = v.Elem()
-		//fmt.Println("V", v)
-		//t := v.Type()
 
 		for i, c := range columns {
 			cv := *(result[i].(*interface{}))
@@ -190,23 +187,6 @@ func (m *Sql) Select(targets interface{}, query string, args ...interface{}) err
 				continue
 			}
 			field = v.FieldByName(fn)
-			// for x := 0; x < v.NumField(); x++ {
-			// 	tag := t.Field(x).Tag.Get("db")
-			// 	if len(tag) == 0 {
-			// 		continue
-			// 	}
-			// 	splitted := strings.Split(tag, ",")
-			// 	if len(splitted) == 0 {
-			// 		continue
-			// 	}
-
-			// 	if c != splitted[0] {
-			// 		continue
-			// 	}
-
-			// 	field = v.Field(i)
-			// 	break
-			// }
 
 			if !field.IsValid() {
 				continue
@@ -279,25 +259,6 @@ func (m *Sql) Get(target interface{}, query string, args ...interface{}) error {
 		}
 
 		field := v.FieldByName(fn)
-
-		// for x := 0; x < v.NumField(); x++ {
-		// 	tag := t.Field(x).Tag.Get("db")
-		// 	if len(tag) == 0 {
-		// 		//fmt.Println("Tag is 0")
-		// 		continue
-		// 	}
-		// 	splitted := strings.Split(tag, ",")
-		// 	if len(splitted) == 0 {
-		// 		continue
-		// 	}
-
-		// 	if c != splitted[0] {
-		// 		continue
-		// 	}
-
-		// 	field = v.Field(i)
-		// 	break
-		// }
 
 		if !field.IsValid() {
 			continue
