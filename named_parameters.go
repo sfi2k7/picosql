@@ -2,31 +2,45 @@ package picosql
 
 import "strings"
 
+const (
+	colonSeperator = ":"
+	atSeperator    = "@"
+)
+
 func ExtractNamedParameters(query string) (string, []string) {
 	var paramaters []string
 
 	if len(strings.TrimSpace(query)) == 0 {
-		return "", paramaters
+		return query, paramaters
 	}
 
-	if strings.Index(query, ":") < 0 {
-		return "", paramaters
+	hasColon := strings.Index(query, colonSeperator) > 0
+	hasAt := strings.Index(query, atSeperator) > 0
+
+	if !hasColon && !hasAt {
+		return query, paramaters
+	}
+	sep := colonSeperator
+
+	if hasAt {
+		sep = atSeperator
 	}
 
 	isLast := false
 	s := query
 	for {
-		next := strings.Index(s, ":")
+		next := strings.Index(s, sep)
 
 		if next < 0 {
 			break
 		}
+		nextPlus := next + 1
+		further := strings.Index(s[nextPlus:], ",")
 
-		further := strings.Index(s[next+1:], ",")
 		if further < 0 {
-			further = strings.Index(s[next+1:], " ")
+			further = strings.Index(s[nextPlus:], " ")
 			if further < 0 {
-				further = len(s) - (next + 1)
+				further = len(s) - (nextPlus)
 			}
 		}
 
@@ -39,7 +53,7 @@ func ExtractNamedParameters(query string) (string, []string) {
 			until = further + next
 		}
 
-		arg := s[next+1 : until+1]
+		arg := s[nextPlus : until+1]
 		paramaters = append(paramaters, arg)
 		if isLast {
 			break
@@ -47,7 +61,8 @@ func ExtractNamedParameters(query string) (string, []string) {
 		s = s[until:]
 	}
 	for _, p := range paramaters {
-		query = strings.Replace(query, ":"+p, "?", 1)
+		query = strings.Replace(query, sep+p, "?", 1)
 	}
+
 	return query, paramaters
 }

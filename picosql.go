@@ -3,6 +3,7 @@ package picosql
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"time"
@@ -105,7 +106,8 @@ func (m *Sql) NamedExec(query string, args interface{}) (int64, error) {
 		f := v.FieldByName(fn)
 		data[i] = f.Interface()
 	}
-
+	fmt.Println(q, param, data)
+	return 0, nil
 	res, err := m.db.Exec(q, data...)
 
 	if err != nil {
