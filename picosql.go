@@ -106,8 +106,9 @@ func (m *Sql) NamedExec(query string, args interface{}) (int64, error) {
 		f := v.FieldByName(fn)
 		data[i] = f.Interface()
 	}
+
 	fmt.Println(q, param, data)
-	return 0, nil
+
 	res, err := m.db.Exec(q, data...)
 
 	if err != nil {
@@ -130,6 +131,124 @@ func (m *Sql) NamedExec(query string, args interface{}) (int64, error) {
 	}
 
 	return affected, nil
+}
+
+func (m *Sql) NamedInsertAll(query string, args interface{}) ([]int64, error) {
+	// m.open()
+	fmt.Println("Inserting all")
+	// if !m.IsOpen {
+	// 	return 0, connectionError
+	// }
+	//Validation Example
+
+	var ids []int64
+	v := reflect.ValueOf(args)
+	if v.Kind() != reflect.Slice {
+		return ids, errors.New("Input parameter must be a slice")
+	}
+
+	l := v.Len()
+
+	if l == 0 {
+		return ids, errors.New("Missing required parameters")
+	}
+
+	sample := v.Index(l - 1).Elem()
+
+	if sample.Kind() != reflect.Struct {
+		return ids, errors.New("Must provide a slice of structs")
+	}
+
+	tm := m.tm.get(sample.Type())
+	fmt.Println(tm)
+
+	q, param := ExtractNamedParameters(query)
+
+	for x := 0; x < l; x++ {
+		single := v.Index(x)
+		sv := single.Elem()
+		data := make([]interface{}, len(param))
+		for i, p := range param {
+			fn, ok := tm[p]
+			if !ok {
+				continue
+			}
+			f := sv.FieldByName(fn)
+			data[i] = f.Interface()
+		}
+
+		res, err := m.db.Exec(q, data...)
+
+		if err != nil {
+			return ids, err
+		}
+		lastID, err := res.LastInsertId()
+		if err != nil {
+			return ids, err
+		}
+		ids = append(ids, lastID)
+	}
+
+	return ids, nil
+}
+
+func (m *Sql) NamedUpdateAll(query string, args interface{}) (int64, error) {
+	// m.open()
+	fmt.Println("Updating all")
+	// if !m.IsOpen {
+	// 	return 0, connectionError
+	// }
+	//Validation Example
+
+	var totalAffected int64
+	v := reflect.ValueOf(args)
+	if v.Kind() != reflect.Slice {
+		return totalAffected, errors.New("Input parameter must be a slice")
+	}
+
+	l := v.Len()
+
+	if l == 0 {
+		return totalAffected, errors.New("Missing required parameters")
+	}
+
+	sample := v.Index(l - 1).Elem()
+
+	if sample.Kind() != reflect.Struct {
+		return totalAffected, errors.New("Must provide a slice of structs")
+	}
+
+	tm := m.tm.get(sample.Type())
+	fmt.Println(tm)
+
+	q, param := ExtractNamedParameters(query)
+
+	for x := 0; x < l; x++ {
+		single := v.Index(x)
+		sv := single.Elem()
+		data := make([]interface{}, len(param))
+		for i, p := range param {
+			fn, ok := tm[p]
+			if !ok {
+				continue
+			}
+			f := sv.FieldByName(fn)
+			data[i] = f.Interface()
+		}
+
+		res, err := m.db.Exec(q, data...)
+
+		if err != nil {
+			return totalAffected, err
+		}
+		affected, err := res.RowsAffected()
+		if err != nil {
+			return totalAffected, err
+		}
+		totalAffected += affected
+	}
+
+	return totalAffected, nil
 }
 
 func (m *Sql) Insert(query string, args ...interface{}) (int64, error) {
@@ -536,9 +655,25 @@ func (m *Sql) Close() {
 	m.db = nil
 }
 
-func (m *Sql) Clone() *Sql {
-	s := &Sql{IsOpen: m.IsOpen, cs: m.cs, db: m.db, retries: m.retries, tm: m.tm, isClone: true}
-	return s
+func (m *Sql) Clone() (*Sql, error) {
+	s := &Sql{
+		IsOpen:  m.IsOpen,
+		cs:      m.cs,
+		db:      m.db,
+		retries: m.retries,
+		tm:      m.tm,
+		isClone: true,
+	}
+
+	if s.db.Ping() != nil {
+		m.IsOpen = false
+		s.open()
+		if s.Ping() != nil {
+			return nil, connectionError
+		}
+
+	}
+	return s, nil
 }
 
 func New(driver, cs string) (*Sql, error) {

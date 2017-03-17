@@ -1,3 +1,4 @@
+## Warning -  Untested Code Ahead
 # Wrapper around database/sql
 inspired by https://github.com/jmoiron/sqlx
 ## version
@@ -9,7 +10,7 @@ open
 
 ```GO
 
-    ps,err:= picosql.Open("driver","connection string")
+    ps,err:= picosql.New("driver","connection string")
     
     ps.Get(&target,"query",args)
     ps.Select(&target,"query",args)
@@ -23,6 +24,7 @@ open
     ps.Slice("query",args)
     ps.Slices("query",args)
 
+    ps.NamedExec("query",args)
     ps.Exec("query",args)
     ps.Query("query",args)
     ps.QueryRow("query",args)
