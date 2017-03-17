@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"reflect"
+	"strings"
 	"time"
 )
 
@@ -11,6 +12,7 @@ const maxRetries = 3
 
 var (
 	connectionError = errors.New("No Connection is available")
+	missingField    = errors.New("Missing parameter in target :")
 )
 
 type Sql struct {
@@ -23,8 +25,19 @@ type Sql struct {
 	isClone bool
 }
 
+// func (m *Sql) fillNamedParameters(elementType reflect.Type, query string) (string, []interface{}) {
+// 	s, pars := ExtractNamedParameters(query)
+// 	tm:=
+
+// 	return "", nil
+// }
+
 func (m *Sql) open() error {
-	if m.IsOpen && m.db.Ping() == nil {
+	if m.IsOpen {
+		return nil
+	}
+
+	if m.db != nil && m.db.Ping() == nil {
 		return nil
 	}
 
@@ -36,7 +49,6 @@ func (m *Sql) open() error {
 
 	db.SetMaxIdleConns(2)
 	db.SetMaxOpenConns(2)
-	db.SetConnMaxLifetime(time.Second * 5)
 
 	m.db = db
 	err = db.Ping()
@@ -67,6 +79,55 @@ func (m *Sql) Count(query string, args ...interface{}) (int64, error) {
 	}
 
 	return count, nil
+}
+
+func (m *Sql) NamedExec(query string, args interface{}) (int64, error) {
+	m.open()
+
+	if !m.IsOpen {
+		return 0, connectionError
+	}
+
+	v := reflect.ValueOf(args)
+	v = v.Elem()
+	t := v.Type()
+
+	q, param := ExtractNamedParameters(query)
+
+	tm := m.tm.get(t)
+	data := make([]interface{}, len(param))
+
+	for i, p := range param {
+		fn, ok := tm[p]
+		if !ok {
+			return 0, errors.New(missingField.Error() + p)
+		}
+		f := v.FieldByName(fn)
+		data[i] = f.Interface()
+	}
+
+	res, err := m.db.Exec(q, data...)
+
+	if err != nil {
+		return 0, err
+	}
+
+	if strings.ToLower(q[0:6]) == "insert" {
+		lastID, err := res.LastInsertId()
+
+		if err != nil {
+			return 0, err
+		}
+		return lastID, nil
+	}
+
+	affected, err := res.RowsAffected()
+
+	if err != nil {
+		return 0, err
+	}
+
+	return affected, nil
 }
 
 func (m *Sql) Insert(query string, args ...interface{}) (int64, error) {
@@ -457,6 +518,7 @@ func (m *Sql) Ping() error {
 }
 
 func (m *Sql) Close() {
+
 	if m.isClone {
 		m.IsOpen = false
 		m.cs = ""
