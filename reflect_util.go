@@ -27,6 +27,10 @@ func setValue(field reflect.Value, v interface{}) error {
 	case float64:
 		field.SetFloat(nv)
 	case time.Time:
+		if field.Kind() == reflect.Ptr {
+			field.Set(reflect.ValueOf(&nv))
+			break
+		}
 		field.Set(reflect.ValueOf(nv))
 	case bool:
 		field.SetBool(nv)
