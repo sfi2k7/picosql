@@ -19,6 +19,9 @@ open
     ps.Insert("query",args)
     ps.Update("query",args)
 
+    ps.NamedInsertAll("query",args)
+    ps.NamedUpdateAll("query",args)
+
     ps.Map("query",args)
     ps.Maps("query",args)
     ps.Slice("query",args)
@@ -33,5 +36,8 @@ open
     ps.Clone()
     ps.Ping()
     
-
-
+## TODO
+- Test
+- DRY
+- Tune
+- Repeat

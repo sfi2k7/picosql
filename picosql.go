@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
-	"time"
+	"sync"
 )
 
 const maxRetries = 3
@@ -14,6 +14,7 @@ const maxRetries = 3
 var (
 	connectionError = errors.New("No Connection is available")
 	missingField    = errors.New("Missing parameter in target :")
+	driverLock      sync.Mutex
 )
 
 type Sql struct {
@@ -34,6 +35,9 @@ type Sql struct {
 // }
 
 func (m *Sql) open() error {
+	driverLock.Lock()
+	defer driverLock.Unlock()
+
 	if m.IsOpen {
 		return nil
 	}
@@ -97,33 +101,32 @@ func (m *Sql) NamedExec(query string, args interface{}) (int64, error) {
 
 	tm := m.tm.get(t)
 	data := make([]interface{}, len(param))
-
+	//fmt.Println(tm)
 	for i, p := range param {
 		fn, ok := tm[p]
 		if !ok {
+			//fmt.Println(p, tm)
 			return 0, errors.New(missingField.Error() + p)
 		}
 		f := v.FieldByName(fn)
 		data[i] = f.Interface()
 	}
 
-	fmt.Println(q, param, data)
-
 	res, err := m.db.Exec(q, data...)
 
 	if err != nil {
 		return 0, err
 	}
-
+	fmt.Println(q[0:6])
 	if strings.ToLower(q[0:6]) == "insert" {
 		lastID, err := res.LastInsertId()
-
+		//fmt.Println("Getting last ID")
 		if err != nil {
 			return 0, err
 		}
 		return lastID, nil
 	}
-
+	//fmt.Println("Getting Affected")
 	affected, err := res.RowsAffected()
 
 	if err != nil {
@@ -134,11 +137,11 @@ func (m *Sql) NamedExec(query string, args interface{}) (int64, error) {
 }
 
 func (m *Sql) NamedInsertAll(query string, args interface{}) ([]int64, error) {
-	// m.open()
-	fmt.Println("Inserting all")
-	// if !m.IsOpen {
-	// 	return 0, connectionError
-	// }
+	m.open()
+
+	if !m.IsOpen {
+		return []int64{}, connectionError
+	}
 	//Validation Example
 
 	var ids []int64
@@ -160,7 +163,6 @@ func (m *Sql) NamedInsertAll(query string, args interface{}) ([]int64, error) {
 	}
 
 	tm := m.tm.get(sample.Type())
-	fmt.Println(tm)
 
 	q, param := ExtractNamedParameters(query)
 
@@ -176,7 +178,7 @@ func (m *Sql) NamedInsertAll(query string, args interface{}) ([]int64, error) {
 			f := sv.FieldByName(fn)
 			data[i] = f.Interface()
 		}
-
+		//fmt.Println(q, data)
 		res, err := m.db.Exec(q, data...)
 
 		if err != nil {
@@ -193,11 +195,11 @@ func (m *Sql) NamedInsertAll(query string, args interface{}) ([]int64, error) {
 }
 
 func (m *Sql) NamedUpdateAll(query string, args interface{}) (int64, error) {
-	// m.open()
-	fmt.Println("Updating all")
-	// if !m.IsOpen {
-	// 	return 0, connectionError
-	// }
+	m.open()
+	if !m.IsOpen {
+		return 0, connectionError
+	}
+
 	//Validation Example
 
 	var totalAffected int64
@@ -219,7 +221,7 @@ func (m *Sql) NamedUpdateAll(query string, args interface{}) (int64, error) {
 	}
 
 	tm := m.tm.get(sample.Type())
-	fmt.Println(tm)
+	//fmt.Println(tm)
 
 	q, param := ExtractNamedParameters(query)
 
@@ -281,14 +283,14 @@ func (m *Sql) Exec(query string, args ...interface{}) (sql.Result, error) {
 	return m.db.Exec(query, args...)
 }
 
-func (m *Sql) Query(query string, args ...interface{}) (sql.Rows, error) {
+func (m *Sql) Query(query string, args ...interface{}) (*sql.Rows, error) {
 	m.open()
 
 	if !m.IsOpen {
-		return sql.Rows{}, connectionError
+		return nil, connectionError
 	}
 
-	return m.Query(query, args...)
+	return m.db.Query(query, args...)
 }
 
 func (m *Sql) QueryRow(query string, args ...interface{}) *sql.Row {
@@ -338,8 +340,18 @@ func (m *Sql) Select(targets interface{}, query string, args ...interface{}) err
 	sliceValue := reflect.ValueOf(targets).Elem()
 	itemType := sliceValue.Type()
 	elementType := itemType.Elem()
-	tm := m.tm.get(elementType.Elem())
 
+	if elementType.Kind() == reflect.Ptr {
+		elementType = elementType.Elem()
+	}
+
+	isPrimitive := elementType.Kind() != reflect.Struct
+
+	var tm map[string]string
+	if !isPrimitive {
+		tm = m.tm.get(elementType)
+	}
+	//fmt.Println(tm)
 	for res.Next() {
 		columns, err := res.Columns()
 		if err != nil {
@@ -358,7 +370,15 @@ func (m *Sql) Select(targets interface{}, query string, args ...interface{}) err
 			return err
 		}
 
-		target := reflect.New(elementType.Elem())
+		if isPrimitive {
+			fmt.Println("Premiive")
+			target := reflect.New(elementType)
+			setValue(target.Elem(), *(result[0].(*interface{})))
+			sliceValue.Set(reflect.Append(sliceValue, target.Elem()))
+			continue
+		}
+
+		target := reflect.New(elementType)
 		v := target.Elem()
 
 		for i, c := range columns {
@@ -374,19 +394,9 @@ func (m *Sql) Select(targets interface{}, query string, args ...interface{}) err
 				continue
 			}
 
-			switch nv := cv.(type) {
-			case string:
-				field.SetString(nv)
-			case int:
-				field.SetInt(int64(nv))
-			case int64:
-				field.SetInt(nv)
-			case time.Time:
-				field.Set(reflect.ValueOf(nv))
-			case bool:
-				field.SetBool(nv)
-			case []byte:
-				field.SetBytes(nv)
+			err := setValue(field, cv)
+			if err != nil {
+				fmt.Println(err)
 			}
 		}
 		sliceValue.Set(reflect.Append(sliceValue, target))
@@ -429,37 +439,35 @@ func (m *Sql) Get(target interface{}, query string, args ...interface{}) error {
 	}
 
 	v := reflect.ValueOf(target)
-	v = v.Elem()
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+
 	t := v.Type()
-	tm := m.tm.get(t)
-	for i, c := range columns {
-		cv := *(result[i].(*interface{}))
-		fn, ok := tm[c]
+	if v.Kind() == reflect.Struct {
+		tm := m.tm.get(t)
 
-		if !ok {
-			continue
+		for i, c := range columns {
+			cv := *(result[i].(*interface{}))
+			fn, ok := tm[c]
+
+			if !ok {
+				continue
+			}
+
+			field := v.FieldByName(fn)
+
+			if !field.IsValid() {
+				continue
+			}
+
+			setValue(field, cv)
 		}
-
-		field := v.FieldByName(fn)
-
-		if !field.IsValid() {
-			continue
-		}
-
-		switch nv := cv.(type) {
-		case string:
-			field.SetString(nv)
-		case int:
-			field.SetInt(int64(nv))
-		case int64:
-			field.SetInt(nv)
-		case time.Time:
-			field.Set(reflect.ValueOf(nv))
-		case bool:
-			field.SetBool(nv)
-		case []byte:
-			field.SetBytes(nv)
-		}
+	} else {
+		cv := *(result[0].(*interface{}))
+		fmt.Println(cv)
+		setValue(v, cv)
+		//v.Set(reflect.ValueOf(cv))
 	}
 
 	return nil

@@ -6,6 +6,10 @@ import (
 	"sync"
 )
 
+const (
+	tagPrefix = "db"
+)
+
 type tagMapper map[string]map[string]string
 
 var tagHelperLock sync.Mutex
@@ -30,7 +34,7 @@ func (tm tagMapper) build(target reflect.Type) {
 	for x := 0; x < t.NumField(); x++ {
 		f := t.Field(x)
 		fname := f.Name
-		tags := strings.Split(f.Tag.Get("db"), ",")
+		tags := strings.Split(f.Tag.Get(tagPrefix), ",")
 		tag := fname
 		if len(tags) > 0 {
 			tag = strings.TrimSpace(tags[0])

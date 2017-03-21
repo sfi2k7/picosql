@@ -27,7 +27,8 @@ func ExtractNamedParameters(query string) (string, []string) {
 	}
 
 	isLast := false
-	s := query
+
+	s := strings.TrimSpace(query)
 	for {
 		next := strings.Index(s, sep)
 
@@ -40,7 +41,10 @@ func ExtractNamedParameters(query string) (string, []string) {
 		if further < 0 {
 			further = strings.Index(s[nextPlus:], " ")
 			if further < 0 {
-				further = len(s) - (nextPlus)
+				further = strings.Index(s[nextPlus:], ")")
+				if further < 0 {
+					further = len(s) - (nextPlus)
+				}
 			}
 		}
 
@@ -54,7 +58,7 @@ func ExtractNamedParameters(query string) (string, []string) {
 		}
 
 		arg := s[nextPlus : until+1]
-		paramaters = append(paramaters, arg)
+		paramaters = append(paramaters, strings.TrimSpace(arg))
 		if isLast {
 			break
 		}
