@@ -1,0 +1,37 @@
+{
+    "CASSReportLink": "JobId required to generate summary report links...",
+    "NCOAReportLink": "JobId required to generate summary report links...",
+    "Records": [
+        {
+            "AddressExtras": "",
+            "AddressKey": "02860546299",
+            "AddressLine1": "329 Prospect St",
+            "AddressLine2": "",
+            "AddressTypeCode": "H",
+            "BaseMelissaAddressKey": "",
+            "CarrierRoute": "C011",
+            "City": "Pawtucket",
+            "CityAbbreviation": "Pawtucket",
+            "CompanyName": "",
+            "CountryCode": "US",
+            "CountryName": "United States",
+            "DeliveryPointCheckDigit": "9",
+            "DeliveryPointCode": "99",
+            "MelissaAddressKey": "",
+            "MoveEffectiveDate": "",
+            "MoveTypeCode": "",
+            "PostalCode": "02860-5462",
+            "RecordID": "1",
+            "Results": "AC01,AE09,AS02,CS02",
+            "StandardizedBaseMelissaAddressKey": "",
+            "StandardizedMelissaAddressKey": "",
+            "State": "RI",
+            "StateName": "Rhode Island",
+            "Urbanization": ""
+        }
+    ],
+    "TotalRecords": "1",
+    "TransmissionReference": "37d30041dc1d41faa7400ded0fdf6fe6",
+    "TransmissionResults": "",
+    "Version": "4.0.4.44"
+}

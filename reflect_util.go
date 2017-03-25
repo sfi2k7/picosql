@@ -1,6 +1,7 @@
 package picosql
 
 import (
+	"fmt"
 	"reflect"
 	"time"
 
@@ -44,6 +45,9 @@ func setValue(field reflect.Value, v interface{}) error {
 			str := string(nv)
 			i, _ := strconv.Atoi(str)
 			field.SetInt(int64(i))
+		} else if field.Kind() == reflect.Bool {
+			str := string(nv)
+			field.SetBool(str == "1")
 		} else if field.Kind() == reflect.Int64 {
 			str := string(nv)
 			i, _ := strconv.Atoi(str)
@@ -53,6 +57,7 @@ func setValue(field reflect.Value, v interface{}) error {
 			i, _ := strconv.ParseFloat(str, 64)
 			field.SetFloat(i)
 		} else {
+			fmt.Println(field.Kind(), nv)
 			return errors.New("Invalid Field type for bytes:")
 		}
 	}

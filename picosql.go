@@ -117,7 +117,6 @@ func (m *Sql) NamedExec(query string, args interface{}) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	fmt.Println(q[0:6])
 	if strings.ToLower(q[0:6]) == "insert" {
 		lastID, err := res.LastInsertId()
 		//fmt.Println("Getting last ID")
@@ -371,7 +370,6 @@ func (m *Sql) Select(targets interface{}, query string, args ...interface{}) err
 		}
 
 		if isPrimitive {
-			fmt.Println("Premiive")
 			target := reflect.New(elementType)
 			setValue(target.Elem(), *(result[0].(*interface{})))
 			sliceValue.Set(reflect.Append(sliceValue, target.Elem()))

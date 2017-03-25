@@ -1,0 +1,92 @@
+{
+    "info": {
+        "statuscode": 0,
+        "copyright": {
+            "text": "\u00A9 2017 MapQuest, Inc.",
+            "imageUrl": "http://api.mqcdn.com/res/mqlogo.gif",
+            "imageAltText": "\u00A9 2017 MapQuest, Inc."
+        },
+        "messages": []
+    },
+    "options": {
+        "maxResults": -1,
+        "thumbMaps": true,
+        "ignoreLatLngInput": false
+    },
+    "results": [
+        {
+            "providedLocation": {
+                "street": "1090 N Charlotte St, Lancaster PA"
+            },
+            "locations": [
+                {
+                    "street": "1090 North Charlotte Street",
+                    "adminArea6": "",
+                    "adminArea6Type": "Neighborhood",
+                    "adminArea5": "Lancaster",
+                    "adminArea5Type": "City",
+                    "adminArea4": "Lancaster County",
+                    "adminArea4Type": "County",
+                    "adminArea3": "PA",
+                    "adminArea3Type": "State",
+                    "adminArea1": "US",
+                    "adminArea1Type": "Country",
+                    "postalCode": "17603",
+                    "geocodeQualityCode": "P1XAX",
+                    "geocodeQuality": "POINT",
+                    "dragPoint": false,
+                    "sideOfStreet": "N",
+                    "linkId": "0",
+                    "unknownInput": "",
+                    "type": "s",
+                    "latLng": {
+                        "lat": 40.053019,
+                        "lng": -76.314701
+                    },
+                    "displayLatLng": {
+                        "lat": 40.053019,
+                        "lng": -76.314701
+                    },
+                    "mapUrl": "http://open.mapquestapi.com/staticmap/v4/getmap?key=Gmjtd|luu82lu7n5,82=o5-lr805&type=map&size=225,160&pois=purple-1,40.0530189,-76.3147014635315,0,0,|&center=40.0530189,-76.3147014635315&zoom=15&rand=685078879"
+                }
+            ]
+        },
+        {
+            "providedLocation": {
+                "street": "2 Silver Drive, Nashua NH"
+            },
+            "locations": [
+                {
+                    "street": "2 Silver Drive",
+                    "adminArea6": "South Nashua",
+                    "adminArea6Type": "Neighborhood",
+                    "adminArea5": "Nashua",
+                    "adminArea5Type": "City",
+                    "adminArea4": "Hillsborough County",
+                    "adminArea4Type": "County",
+                    "adminArea3": "NH",
+                    "adminArea3Type": "State",
+                    "adminArea1": "US",
+                    "adminArea1Type": "Country",
+                    "postalCode": "03060",
+                    "geocodeQualityCode": "P1AAX",
+                    "geocodeQuality": "POINT",
+                    "dragPoint": false,
+                    "sideOfStreet": "N",
+                    "linkId": "0",
+                    "unknownInput": "",
+                    "type": "s",
+                    "latLng": {
+                        "lat": 42.707609,
+                        "lng": -71.443838
+                    },
+                    "displayLatLng": {
+                        "lat": 42.707609,
+                        "lng": -71.443838
+                    },
+                    "mapUrl": "http://open.mapquestapi.com/staticmap/v4/getmap?key=Gmjtd|luu82lu7n5,82=o5-lr805&type=map&size=225,160&pois=purple-1,42.707609,-71.443838469894,0,0,|&center=42.707609,-71.443838469894&zoom=15&rand=21891031"
+                }
+            ]
+        }
+    ]
+}
