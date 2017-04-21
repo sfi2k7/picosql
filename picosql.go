@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"time"
 )
 
 const maxRetries = 3
@@ -34,6 +35,18 @@ type Sql struct {
 // 	return "", nil
 // }
 
+func (m *Sql) SetMaxIdleConns(n int) {
+	m.db.SetMaxIdleConns(n)
+}
+
+func (m *Sql) SetMaxOpenConns(n int) {
+	m.db.SetMaxOpenConns(n)
+}
+
+func (m *Sql) SetConnMaxLifetime(d time.Duration) {
+	m.db.SetConnMaxLifetime(d)
+}
+
 func (m *Sql) open() error {
 	driverLock.Lock()
 	defer driverLock.Unlock()
@@ -52,8 +65,9 @@ func (m *Sql) open() error {
 		return err
 	}
 
-	db.SetMaxIdleConns(2)
-	db.SetMaxOpenConns(2)
+	db.SetMaxIdleConns(20)
+	db.SetMaxOpenConns(40)
+	db.SetConnMaxLifetime(time.Minute * 3)
 
 	m.db = db
 	err = db.Ping()
@@ -94,7 +108,10 @@ func (m *Sql) NamedExec(query string, args interface{}) (int64, error) {
 	}
 
 	v := reflect.ValueOf(args)
-	v = v.Elem()
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+
 	t := v.Type()
 
 	q, param := ExtractNamedParameters(query)
@@ -164,7 +181,7 @@ func (m *Sql) NamedInsertAll(query string, args interface{}) ([]int64, error) {
 	tm := m.tm.get(sample.Type())
 
 	q, param := ExtractNamedParameters(query)
-
+	tx, _ := m.db.Begin()
 	for x := 0; x < l; x++ {
 		single := v.Index(x)
 		sv := single.Elem()
@@ -178,7 +195,7 @@ func (m *Sql) NamedInsertAll(query string, args interface{}) ([]int64, error) {
 			data[i] = f.Interface()
 		}
 		//fmt.Println(q, data)
-		res, err := m.db.Exec(q, data...)
+		res, err := tx.Exec(q, data...)
 
 		if err != nil {
 			return ids, err
@@ -188,6 +205,11 @@ func (m *Sql) NamedInsertAll(query string, args interface{}) ([]int64, error) {
 			return ids, err
 		}
 		ids = append(ids, lastID)
+	}
+	err := tx.Commit()
+
+	if err != nil {
+		tx.Rollback()
 	}
 
 	return ids, nil
@@ -223,7 +245,7 @@ func (m *Sql) NamedUpdateAll(query string, args interface{}) (int64, error) {
 	//fmt.Println(tm)
 
 	q, param := ExtractNamedParameters(query)
-
+	tx, _ := m.db.Begin()
 	for x := 0; x < l; x++ {
 		single := v.Index(x)
 		sv := single.Elem()
@@ -237,7 +259,7 @@ func (m *Sql) NamedUpdateAll(query string, args interface{}) (int64, error) {
 			data[i] = f.Interface()
 		}
 
-		res, err := m.db.Exec(q, data...)
+		res, err := tx.Exec(q, data...)
 
 		if err != nil {
 			return totalAffected, err
@@ -248,7 +270,10 @@ func (m *Sql) NamedUpdateAll(query string, args interface{}) (int64, error) {
 		}
 		totalAffected += affected
 	}
-
+	err := tx.Commit()
+	if err != nil {
+		tx.Rollback()
+	}
 	return totalAffected, nil
 }
 
