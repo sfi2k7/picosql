@@ -151,6 +151,75 @@ func (m *Sql) NamedExec(query string, args interface{}) (int64, error) {
 
 	return affected, nil
 }
+func (m *Sql) createTransection() (*sql.Tx, error) {
+	m.open()
+
+	if !m.IsOpen {
+		return nil, nil
+	}
+	return m.db.Begin()
+}
+
+func (m *Sql) CommitOrRollback(tx *sql.Tx) bool {
+	err := tx.Commit()
+	if err != nil {
+		tx.Rollback()
+		return false
+	}
+	return true
+}
+
+func (m *Sql) NamedExecTransection(tx *sql.Tx, query string, args interface{}) (int64, error) {
+	m.open()
+
+	if !m.IsOpen {
+		return 0, connectionError
+	}
+
+	v := reflect.ValueOf(args)
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+
+	t := v.Type()
+
+	q, param := ExtractNamedParameters(query)
+
+	tm := m.tm.get(t)
+	data := make([]interface{}, len(param))
+	//fmt.Println(tm)
+	for i, p := range param {
+		fn, ok := tm[p]
+		if !ok {
+			//fmt.Println(p, tm)
+			return 0, errors.New(missingField.Error() + p)
+		}
+		f := v.FieldByName(fn)
+		data[i] = f.Interface()
+	}
+
+	res, err := tx.Exec(q, data...)
+
+	if err != nil {
+		return 0, err
+	}
+	if strings.ToLower(q[0:6]) == "insert" {
+		lastID, err := res.LastInsertId()
+		//fmt.Println("Getting last ID")
+		if err != nil {
+			return 0, err
+		}
+		return lastID, nil
+	}
+	//fmt.Println("Getting Affected")
+	affected, err := res.RowsAffected()
+
+	if err != nil {
+		return 0, err
+	}
+
+	return affected, nil
+}
 
 func (m *Sql) NamedInsertAll(query string, args interface{}) ([]int64, error) {
 	m.open()
@@ -217,6 +286,7 @@ func (m *Sql) NamedInsertAll(query string, args interface{}) ([]int64, error) {
 
 func (m *Sql) NamedUpdateAll(query string, args interface{}) (int64, error) {
 	m.open()
+
 	if !m.IsOpen {
 		return 0, connectionError
 	}
