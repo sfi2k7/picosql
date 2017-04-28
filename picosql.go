@@ -151,6 +151,7 @@ func (m *Sql) NamedExec(query string, args interface{}) (int64, error) {
 
 	return affected, nil
 }
+
 func (m *Sql) CreateTransection() (*sql.Tx, error) {
 	m.open()
 
