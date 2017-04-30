@@ -67,7 +67,7 @@ func (m *Sql) open() error {
 
 	db.SetMaxIdleConns(20)
 	db.SetMaxOpenConns(40)
-	db.SetConnMaxLifetime(time.Minute * 3)
+	db.SetConnMaxLifetime(0)
 
 	m.db = db
 	err = db.Ping()
