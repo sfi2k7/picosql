@@ -5,9 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/sfi2k7/blueutil"
 )
 
 const maxRetries = 3
@@ -17,6 +20,20 @@ var (
 	missingField    = errors.New("Missing parameter in target :")
 	driverLock      sync.Mutex
 )
+
+type ColumnDefinition struct {
+	ColumnName      string          `db:"column_name"`
+	OrdinalPosition string          `db:"ordinal_position"`
+	DataType        string          `db:"data_type"`
+	ColumnType      string          `db:"column_type"`
+	SqlColumnType   *sql.ColumnType `db:"-"`
+}
+
+type TableStructure struct {
+	TableName    string
+	DatabaseName string
+	Columns      []*ColumnDefinition
+}
 
 type Sql struct {
 	IsOpen  bool
@@ -51,7 +68,7 @@ func (m *Sql) open() error {
 	driverLock.Lock()
 	defer driverLock.Unlock()
 
-	if m.IsOpen {
+	if m.IsOpen && m.db.Ping() == nil {
 		return nil
 	}
 
@@ -727,11 +744,226 @@ func (m *Sql) Maps(query string, args ...interface{}) ([]map[string]interface{},
 		for i, c := range columns {
 			v := result[i]
 			mp[c] = *(v.(*interface{}))
+			switch v := mp[c].(type) {
+			case []uint8:
+				mp[c] = string(v)
+			}
 		}
 		mps = append(mps, mp)
 	}
 
 	return mps, nil
+}
+
+func (m *Sql) ListTables(dbName string) ([]string, error) {
+	sql := `SELECT TABLE_NAME from information_schema WHERE TABLE_SCHEMA = '` + dbName + "'"
+	var tables []string
+	res, err := m.Query(sql)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Close()
+	for res.Next() {
+		var tableName string
+		res.Scan(&tableName)
+		tables = append(tables, tableName)
+	}
+	return tables, nil
+}
+
+// func (m *Sql) DeleteColumn(tableName, columnName string) error {
+// 	sql := fmt.Sprintf("ALTER TABLE '%s' DROP COLUMN %s", tableName, columnName)
+// 	_, err := m.Exec(sql)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	return nil
+// }
+
+// func (m *Sql) AddColumn(column *ColumnDefinition, after, tableName string) error {
+// 	def := `ADD COLUMN ` + ColumnDefinitionStringBasedOnType(column.ColumnName, column.ColumnType)
+// 	def = def[0 : len(def)-1]
+// 	if len(after) > 0 {
+// 		def += " AFTER " + after
+// 	}
+// 	sql := fmt.Sprintf("ALTER TABLE `%s` %s", tableName, def)
+// 	_, err := m.Exec(sql)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	return nil
+// }
+
+func (m *Sql) simpleQuery(query string) error {
+	rows, err := m.Query(query)
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+	defer rows.Close()
+	if rows.Next() {
+		return nil
+	}
+	return errors.New("No Response from DB")
+}
+
+func (m *Sql) CreateDatabase(dbName string) {
+	err := m.simpleQuery("CREATE DATABASE `" + dbName + "`  DEFAULT CHARACTER SET latin1")
+	if err != nil {
+		fmt.Println(err)
+	}
+}
+
+func (m *Sql) UserExists(userName string) bool {
+	res, err := m.Query("SELECT User from mysql.user WHERE User = ? LIMIT 1", userName)
+	if err != nil {
+		fmt.Println(err)
+		return false
+	}
+	defer res.Close()
+	for res.Next() {
+		var user string
+		res.Scan(&user)
+		return user == userName
+	}
+	return false
+}
+
+func (m *Sql) createUser(userName, password string) error {
+	if m.UserExists(userName) {
+		return nil
+	}
+	sql := "CREATE USER '" + userName + "'@'%' IDENTIFIED BY '" + password + "'"
+	_, err := m.Exec(sql)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (m *Sql) AssignPermissions(db, userName string) error {
+	sql := fmt.Sprintf("GRANT ALL PRIVILEGES ON %s.* TO '%s'@'%' WITH GRANT OPTION;", db, userName)
+	_, err := m.Exec(sql)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (m *Sql) DatabaseExists(db string) (bool, error) {
+	sql := "show databases"
+	res, err := m.Query(sql)
+	if err != nil {
+		return false, err
+	}
+	defer res.Close()
+	for res.Next() {
+		var dbName string
+		res.Scan(&dbName)
+		if dbName == db {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (m *Sql) GetCurrentStructure(dbName, tableName string) (*TableStructure, error) {
+	sql := fmt.Sprintf(`select column_name,ordinal_position,data_type,column_type from information_schema.COLUMNS where table_schema = '%s' and table_name = '%s'`, dbName, tableName)
+	mps, err := m.Maps(sql)
+	if err != nil {
+		return nil, err
+	}
+
+	table := &TableStructure{TableName: tableName, DatabaseName: dbName}
+	for _, v := range mps {
+		var column ColumnDefinition
+		blueutil.FillStruct(v, &column)
+		table.Columns = append(table.Columns, &column)
+	}
+	return table, nil
+
+	// res, err := m.Queryx(sql)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// defer res.Close()
+	// table := &TableStructure{}
+	// for res.Next() {
+	// 	var column ColumnDefinition
+	// 	res.StructScan(&column)
+	// 	table.Columns = append(table.Columns, &column)
+	// }
+	// table.Name = tableName
+	// return table, nil
+}
+
+func (m *Sql) DropTable(tableName string) error {
+	sql := `DROP TABLE ` + tableName
+	_, err := m.Exec(sql)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (m *Sql) columnDefinitionStringBasedOnType(c string, t *sql.ColumnType) string {
+	l, okl := t.Length()
+	if !okl {
+		l = 100
+	}
+	p, s, okd := t.DecimalSize()
+	if !okd {
+		p = 11
+		s = 5
+	}
+
+	switch t.DatabaseTypeName() {
+	case "DATETIME":
+		return "`" + c + "` DATETIME NOT NULL,"
+	case "INT":
+		return "`" + c + "` INT(11) DEFAULT NULL,"
+	case "BIGINT":
+		return "`" + c + "` BIGINT(20) DEFAULT NULL,"
+	case "VARCHAR":
+		fallthrough
+	case "CHAR":
+		fallthrough
+	case "NVARCHAR":
+		return "`" + c + "` VARCHAR(" + strconv.Itoa(int(l)) + ") DEFAULT NULL,"
+	case "TEXT":
+		return "`" + c + "` TEXT DEFAULT NULL,"
+	case "BIT":
+		return "`" + c + "` BIT(1) DEFAULT NULL,"
+	case "DECIMAL":
+		return "`" + c + "` DECIMAL(" + strconv.Itoa(int(p)) + "," + strconv.Itoa(int(s)) + ") DEFAULT NULL,"
+	}
+	return ""
+}
+
+func (m *Sql) CreateTable(tableName string, columns []string, types []*sql.ColumnType, keyField string) error {
+	//fields := strings.Split(header, ",")
+	sql := " CREATE TABLE `" + tableName + "` ("
+	for i, f := range columns {
+		sql += m.columnDefinitionStringBasedOnType(f, types[i])
+	}
+
+	sql += "`current_hash` BIGINT(20) DEFAULT NULL,"
+	if len(keyField) > 0 {
+		if strings.Contains(keyField, ",") {
+			sql = sql[0 : len(sql)-1]
+		} else {
+			sql += "PRIMARY KEY (`" + keyField + "`"
+		}
+	} else {
+		sql = sql[0 : len(sql)-1]
+	}
+	sql += ` ) ENGINE=InnoDB DEFAULT CHARSET=latin1;`
+
+	_, err := m.Exec(sql)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (m *Sql) Ping() error {
