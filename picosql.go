@@ -45,6 +45,27 @@ type Sql struct {
 	isClone bool
 }
 
+type ColumnInfo struct {
+	ID            string                  `bson:"_id"`
+	ViewName      string                  `bson:"viewName"`
+	DatabaseName  string                  `bson:"dbName"`
+	Columns       []string                `bson:"columns"`
+	ColumnTypes   []*sql.ColumnType       `bson:"-"`
+	Simplified    []*ColumnTypeSimplified `bson:"simplified"`
+	PrimaryColumn string                  `bson:"primaryColumn"`
+}
+
+type ColumnTypeSimplified struct {
+	Index      int    `bson:"idx"`
+	Name       string `bson:"name"`
+	Length     int    `bson:"length"`
+	DBType     string `bson:"dbtype"`
+	IsNullable bool   `bson:"isNullable"`
+	Precison   int    `bson:"prec"`
+	Scale      int    `bson:"scale"`
+	ScanType   string `bson:"scanType"`
+}
+
 // func (m *Sql) fillNamedParameters(elementType reflect.Type, query string) (string, []interface{}) {
 // 	s, pars := ExtractNamedParameters(query)
 // 	tm:=
@@ -117,6 +138,26 @@ func (m *Sql) Count(query string, args ...interface{}) (int64, error) {
 	return count, nil
 }
 
+func (m *Sql) RCount(t string) (int64, error) {
+	q := `SELECT COUNT(*) FROM ` + t
+
+	m.open()
+
+	if !m.IsOpen {
+		return 0, connectionError
+	}
+
+	res := m.db.QueryRow(q)
+
+	var count int64
+	err := res.Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+
+	return count, nil
+}
+
 func (m *Sql) NamedExec(query string, args interface{}) (int64, error) {
 	m.open()
 
@@ -132,7 +173,6 @@ func (m *Sql) NamedExec(query string, args interface{}) (int64, error) {
 	t := v.Type()
 
 	q, param := ExtractNamedParameters(query)
-
 	tm := m.tm.get(t)
 	data := make([]interface{}, len(param))
 	//fmt.Println(tm)
@@ -179,6 +219,7 @@ func (m *Sql) CreateTransection() (*sql.Tx, error) {
 }
 
 func (m *Sql) CommitOrRollback(tx *sql.Tx) bool {
+
 	err := tx.Commit()
 	if err != nil {
 		tx.Rollback()
@@ -584,26 +625,33 @@ func (m *Sql) Get(target interface{}, query string, args ...interface{}) error {
 	return nil
 }
 
-func (m *Sql) Slice(query string, args ...interface{}) ([]interface{}, error) {
+func (m *Sql) Slice(query string, args ...interface{}) ([]interface{}, []*sql.ColumnType, error) {
 	m.open()
 
 	if !m.IsOpen {
-		return nil, connectionError
+		return nil, nil, connectionError
 	}
 
 	res, err := m.db.Query(query, args...)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	defer res.Close()
 	if !res.Next() {
-		return nil, errors.New("No result in result set")
+		return nil, nil, errors.New("No result in result set")
 	}
 
 	columns, err := res.Columns()
+
 	if err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+
+	types, err := res.ColumnTypes()
+
+	if err != nil {
+		return nil, nil, err
 	}
 
 	rs := make([]interface{}, len(columns))
@@ -616,35 +664,45 @@ func (m *Sql) Slice(query string, args ...interface{}) ([]interface{}, error) {
 	err = res.Scan(result...)
 
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	for i := range columns {
 		rs[i] = *(result[i].(*interface{}))
+		switch v := rs[i].(type) {
+		case []uint8:
+			rs[i] = string(v)
+		}
 	}
-	return rs, nil
+	return rs, types, nil
 }
 
-func (m *Sql) Slices(query string, args ...interface{}) ([][]interface{}, error) {
+func (m *Sql) Slices(query string, args ...interface{}) ([][]interface{}, []*sql.ColumnType, error) {
 	m.open()
 
 	if !m.IsOpen {
-		return nil, connectionError
+		return nil, nil, connectionError
 	}
 
 	res, err := m.db.Query(query, args...)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	defer res.Close()
 	var scs [][]interface{}
 
+	columns, err := res.Columns()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	types, err := res.ColumnTypes()
+
+	if err != nil {
+		return nil, nil, err
+	}
 	for res.Next() {
-		columns, err := res.Columns()
-		if err != nil {
-			return nil, err
-		}
 
 		sc := make([]interface{}, len(columns))
 		result := make([]interface{}, len(columns))
@@ -655,16 +713,20 @@ func (m *Sql) Slices(query string, args ...interface{}) ([][]interface{}, error)
 
 		err = res.Scan(result...)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		for i := range columns {
 			sc[i] = *(result[i].(*interface{}))
+			switch v := sc[i].(type) {
+			case []uint8:
+				sc[i] = string(v)
+			}
 		}
 		scs = append(scs, sc)
 	}
 
-	return scs, nil
+	return scs, types, nil
 }
 
 func (m *Sql) Map(query string, args ...interface{}) (map[string]interface{}, error) {
@@ -704,6 +766,10 @@ func (m *Sql) Map(query string, args ...interface{}) (map[string]interface{}, er
 	for i, c := range columns {
 		v := result[i]
 		mp[c] = *(v.(*interface{}))
+		switch v := mp[c].(type) {
+		case []uint8:
+			mp[c] = string(v)
+		}
 	}
 	return mp, nil
 }
@@ -756,7 +822,8 @@ func (m *Sql) Maps(query string, args ...interface{}) ([]map[string]interface{},
 }
 
 func (m *Sql) ListTables(dbName string) ([]string, error) {
-	sql := `SELECT TABLE_NAME from information_schema WHERE TABLE_SCHEMA = '` + dbName + "'"
+	//sql := `SELECT TABLE_NAME from information_schema WHERE TABLE_SCHEMA = '` + dbName + "'"
+	sql := `SHOW tables;`
 	var tables []string
 	res, err := m.Query(sql)
 	if err != nil {
@@ -801,17 +868,23 @@ func (m *Sql) simpleQuery(query string) error {
 		return err
 	}
 	defer rows.Close()
+
 	if rows.Next() {
 		return nil
 	}
 	return errors.New("No Response from DB")
 }
 
-func (m *Sql) CreateDatabase(dbName string) {
-	err := m.simpleQuery("CREATE DATABASE `" + dbName + "`  DEFAULT CHARACTER SET latin1")
+func (m *Sql) CreateDatabase(dbName string) error {
+	q := "CREATE DATABASE `" + dbName + "`  DEFAULT CHARACTER SET latin1"
+	res, err := m.Exec(q)
 	if err != nil {
-		fmt.Println(err)
+		return err
 	}
+	res.LastInsertId()
+	res.RowsAffected()
+
+	return nil
 }
 
 func (m *Sql) UserExists(userName string) bool {
@@ -860,7 +933,8 @@ func (m *Sql) DatabaseExists(db string) (bool, error) {
 	for res.Next() {
 		var dbName string
 		res.Scan(&dbName)
-		if dbName == db {
+		if strings.ToLower(dbName) == strings.ToLower(db) {
+			fmt.Println(dbName, db)
 			return true, nil
 		}
 	}
@@ -906,20 +980,23 @@ func (m *Sql) DropTable(tableName string) error {
 	return nil
 }
 
-func (m *Sql) columnDefinitionStringBasedOnType(c string, t *sql.ColumnType) string {
-	l, okl := t.Length()
-	if !okl {
+func (m *Sql) columnDefinitionStringBasedOnType(c string, t *ColumnTypeSimplified) string {
+	l := t.Length
+	if l == 0 {
 		l = 100
 	}
-	p, s, okd := t.DecimalSize()
-	if !okd {
-		p = 11
+	p := 0
+	s := 0
+	if t.Precison == 0 || t.Scale == 0 {
+		p = 20
 		s = 5
 	}
 
-	switch t.DatabaseTypeName() {
+	switch t.DBType {
+	case "DATE":
+		fallthrough
 	case "DATETIME":
-		return "`" + c + "` DATETIME NOT NULL,"
+		return "`" + c + "` DATETIME DEFAULT NULL,"
 	case "INT":
 		return "`" + c + "` INT(11) DEFAULT NULL,"
 	case "BIGINT":
@@ -934,31 +1011,36 @@ func (m *Sql) columnDefinitionStringBasedOnType(c string, t *sql.ColumnType) str
 		return "`" + c + "` TEXT DEFAULT NULL,"
 	case "BIT":
 		return "`" + c + "` BIT(1) DEFAULT NULL,"
+	case "MONEY":
+		fallthrough
 	case "DECIMAL":
 		return "`" + c + "` DECIMAL(" + strconv.Itoa(int(p)) + "," + strconv.Itoa(int(s)) + ") DEFAULT NULL,"
 	}
 	return ""
 }
 
-func (m *Sql) CreateTable(tableName string, columns []string, types []*sql.ColumnType, keyField string) error {
+func (m *Sql) CreateTable(tableName string, columns []string, types []*ColumnTypeSimplified, keyField string) error {
 	//fields := strings.Split(header, ",")
 	sql := " CREATE TABLE `" + tableName + "` ("
 	for i, f := range columns {
-		sql += m.columnDefinitionStringBasedOnType(f, types[i])
+		cd := m.columnDefinitionStringBasedOnType(f, types[i])
+		if f == keyField {
+			cd = strings.Replace(cd, "DEFAULT NULL", "NOT NULL", -1)
+		}
+		sql += cd
 	}
 
-	sql += "`current_hash` BIGINT(20) DEFAULT NULL,"
+	sql += "`current_hash` VARCHAR(25) DEFAULT NULL,"
 	if len(keyField) > 0 {
 		if strings.Contains(keyField, ",") {
 			sql = sql[0 : len(sql)-1]
 		} else {
-			sql += "PRIMARY KEY (`" + keyField + "`"
+			sql += "PRIMARY KEY (`" + keyField + "`)"
 		}
 	} else {
 		sql = sql[0 : len(sql)-1]
 	}
 	sql += ` ) ENGINE=InnoDB DEFAULT CHARSET=latin1;`
-
 	_, err := m.Exec(sql)
 	if err != nil {
 		return err
