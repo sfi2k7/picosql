@@ -1050,7 +1050,7 @@ func (m *Sql) CreateTable(tableName string, columns []string, types []*ColumnTyp
 	} else {
 		sql = sql[0 : len(sql)-1]
 	}
-	sql += ` ) ENGINE=InnoDB DEFAULT CHARSET=latin1;`
+	sql += ` ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`
 	_, err := m.Exec(sql)
 	if err != nil {
 		return err
