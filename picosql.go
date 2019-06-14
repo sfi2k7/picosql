@@ -985,8 +985,13 @@ func (m *Sql) columnDefinitionStringBasedOnType(c string, t *ColumnTypeSimplifie
 	if l == 0 {
 		l = 100
 	}
-	if l > 256 {
-		l = 255
+
+	if l > 1024 {
+		l = 1024
+	}
+
+	if strings.Contains(c, "url") && l < 255 {
+		l = 500
 	}
 
 	p := 0
