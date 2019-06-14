@@ -994,12 +994,13 @@ func (m *Sql) columnDefinitionStringBasedOnType(c string, t *ColumnTypeSimplifie
 		l = 500
 	}
 
-	p := 0
-	s := 0
-	if t.Precison == 0 || t.Scale == 0 {
-		p = 20
-		s = 5
-	}
+	p := 20
+	s := 5
+
+	// if t.Precison == 0 || t.Scale == 0 {
+	// 	p = 20
+	// 	s = 5
+	// }
 
 	switch t.DBType {
 	case "DATE":
