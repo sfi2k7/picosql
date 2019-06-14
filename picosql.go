@@ -985,6 +985,10 @@ func (m *Sql) columnDefinitionStringBasedOnType(c string, t *ColumnTypeSimplifie
 	if l == 0 {
 		l = 100
 	}
+	if l > 256 {
+		l = 255
+	}
+
 	p := 0
 	s := 0
 	if t.Precison == 0 || t.Scale == 0 {
