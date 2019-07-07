@@ -1029,6 +1029,29 @@ func (m *Sql) columnDefinitionStringBasedOnType(c string, t *ColumnTypeSimplifie
 	return ""
 }
 
+func (m *Sql) DropTableNew(db, tableName string) error {
+	sql := fmt.Sprintf("Drop Table `%s`.`%s`", db, tableName)
+	_, err := m.Exec(sql)
+	return err
+}
+
+func (m *Sql) CreateUniqueIndex(db, tableName, keyField string) error {
+	var sb string
+	sb += fmt.Sprintf("ALTER TABLE `%s`.`%s` ", db, tableName)
+	sb += "ADD UNIQUE INDEX `basic` ("
+	var keys = strings.Split(keyField, ",")
+	for i := 0; i < len(keys); i++ {
+		sb += fmt.Sprintf("`%s` ASC,", keys[i])
+	}
+	sb = sb[0 : len(sb)-1]
+	sb += ");"
+	_, err := m.Exec(sb)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (m *Sql) CreateTable(tableName string, columns []string, types []*ColumnTypeSimplified, keyField string) error {
 	//fields := strings.Split(header, ",")
 	sql := " CREATE TABLE `" + tableName + "` ("
@@ -1050,6 +1073,23 @@ func (m *Sql) CreateTable(tableName string, columns []string, types []*ColumnTyp
 	} else {
 		sql = sql[0 : len(sql)-1]
 	}
+	sql += ` ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`
+	_, err := m.Exec(sql)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (m *Sql) CreateTableNoHashOrKey(tableName string, columns []string, types []*ColumnTypeSimplified) error {
+	//fields := strings.Split(header, ",")
+	sql := " CREATE TABLE `" + tableName + "` ("
+	for i, f := range columns {
+		cd := m.columnDefinitionStringBasedOnType(f, types[i])
+		sql += cd
+	}
+
+	sql = sql[0 : len(sql)-1]
 	sql += ` ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`
 	_, err := m.Exec(sql)
 	if err != nil {
@@ -1106,3 +1146,39 @@ func New(driver, cs string) (*Sql, error) {
 	s := &Sql{cs: cs, driver: driver}
 	return s, s.open()
 }
+
+// public class ColumnInfo
+//  {
+// 	[JsonProperty(propertyName:"_id")]
+// 	public string ID    {get;set;}
+// 	[JsonProperty(propertyName:"viewName")]
+// 	public string ViewName    {get;set;}
+// 	[JsonProperty(propertyName:"dbName")]
+// 	public string DatabaseName {get;set;}
+// 	[JsonProperty(propertyName:"columns")]
+// 	public List<string> Columns {get;set;}
+// 	[JsonProperty(propertyName:"simplified")]
+// 	public List<ColumnTypeSimplified> Simplified    {get;set;}
+// 	[JsonProperty(propertyName:"primaryColumn")]
+// 	public string PrimaryColumn    {get;set;}
+// }
+
+// public class ColumnTypeSimplified
+//  {
+// 	[JsonProperty(propertyName:"idx")]
+// 	public int Index {get;set;}
+// 	[JsonProperty(propertyName:"name")]
+// 	public string Name {get;set;}
+// 	[JsonProperty(propertyName:"length")]
+// 	public int Length {get;set;}
+// 	[JsonProperty(propertyName:"dbtype")]
+// 	public string DBType{get;set;}
+// 	[JsonProperty(propertyName:"isNullable")]
+// 	public string IsNullable {get;set;}
+// 	[JsonProperty(propertyName:"prec")]
+// 	public int Precison{get;set;}
+// 	[JsonProperty(propertyName:"scale")]
+// 	public int Scale  {get;set;}
+// 	[JsonProperty(propertyName:"scanType")]
+// 	public string ScanType {get;set;}
+// }
