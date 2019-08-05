@@ -66,6 +66,26 @@ type ColumnTypeSimplified struct {
 	ScanType   string `bson:"scanType"`
 }
 
+type TableInfo struct {
+	Name             string      `db:"Name"`
+	Engine           string      `db:"Engine"`
+	Version          int         `db:"Version"`
+	RowFormat        string      `db:"Row_format"`
+	Rows             int64       `db:"Rows"`
+	AverageRowLength int64       `db:"Average_row_length"`
+	DataLength       int64       `db:"Data_length"`
+	MaxDataLength    int64       `db:"Max_data_length"`
+	IndexLength      int64       `db:"Index_length"`
+	DataFree         int64       `db:"Data_free"`
+	AutoIncrement    interface{} `db:"Auto_increment"`
+	CreateTime       time.Time   `db:"Create_time"`
+	UpdateTime       time.Time   `db:"Update_time"`
+	Collation        string      `db:"Collation"`
+	Checksum         string      `db:"Checksum"`
+	CreateOptions    string      `db:"Create_options"`
+	Comments         string      `db:"Comments"`
+}
+
 // func (m *Sql) fillNamedParameters(elementType reflect.Type, query string) (string, []interface{}) {
 // 	s, pars := ExtractNamedParameters(query)
 // 	tm:=
@@ -117,6 +137,27 @@ func (m *Sql) open() error {
 	m.IsOpen = true
 	m.tm = make(tagMapper)
 	return nil
+}
+
+func (m *Sql) IsEmptyResultError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if strings.Index(err.Error(), "No result in result set") != 0 {
+		return false
+	}
+	return true
+}
+
+func (m *Sql) GetTableInfo(tn string) (*TableInfo, error) {
+	//show table status where name = 'Business'
+	q := fmt.Sprintf(`show table status where name = '%s'`, tn)
+	var single TableInfo
+	err := m.Get(&single, q)
+	if err != nil {
+		return nil, err
+	}
+	return &single, nil
 }
 
 func (m *Sql) Count(query string, args ...interface{}) (int64, error) {
@@ -1004,7 +1045,7 @@ func (m *Sql) columnDefinitionStringBasedOnType(c string, t *ColumnTypeSimplifie
 
 	switch t.DBType {
 	case "DATE":
-		fallthrough
+		return "`" + c + "` DATE DEFAULT NULL,"
 	case "DATETIME":
 		return "`" + c + "` DATETIME DEFAULT NULL,"
 	case "INT":
@@ -1020,7 +1061,7 @@ func (m *Sql) columnDefinitionStringBasedOnType(c string, t *ColumnTypeSimplifie
 	case "TEXT":
 		return "`" + c + "` TEXT DEFAULT NULL,"
 	case "BIT":
-		return "`" + c + "` BIT(1) DEFAULT NULL,"
+		return "`" + c + "` TINYINT(1) DEFAULT NULL,"
 	case "MONEY":
 		fallthrough
 	case "DECIMAL":

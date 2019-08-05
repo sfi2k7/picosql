@@ -3,3 +3,4 @@ cmd/*.*
 .git
 test.go
 cmd/test.go
+*.json
