@@ -1044,10 +1044,12 @@ func (m *Sql) columnDefinitionStringBasedOnType(c string, t *ColumnTypeSimplifie
 	// }
 
 	switch t.DBType {
+	case "DATETIME":
+		fallthrough
 	case "DATE":
 		return "`" + c + "` DATE DEFAULT NULL,"
-	case "DATETIME":
-		return "`" + c + "` DATETIME DEFAULT NULL,"
+	// case "DATETIME":
+	// 	return "`" + c + "` DATETIME DEFAULT NULL,"
 	case "INT":
 		return "`" + c + "` INT(11) DEFAULT NULL,"
 	case "BIGINT":
