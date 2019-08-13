@@ -1063,7 +1063,7 @@ func (m *Sql) columnDefinitionStringBasedOnType(c string, t *ColumnTypeSimplifie
 	case "TEXT":
 		return "`" + c + "` TEXT DEFAULT NULL,"
 	case "BIT":
-		return "`" + c + "` TINYINT(1) DEFAULT NULL,"
+		return "`" + c + "` BIT DEFAULT NULL,"
 	case "MONEY":
 		fallthrough
 	case "DECIMAL":
