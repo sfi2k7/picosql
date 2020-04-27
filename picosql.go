@@ -1054,6 +1054,8 @@ func (m *Sql) columnDefinitionStringBasedOnType(c string, t *ColumnTypeSimplifie
 		return "`" + c + "` INT(11) DEFAULT NULL,"
 	case "BIGINT":
 		return "`" + c + "` BIGINT(20) DEFAULT NULL,"
+	case "NTEXT":
+		fallthrough
 	case "VARCHAR":
 		fallthrough
 	case "CHAR":
@@ -1125,6 +1127,7 @@ func (m *Sql) CreateTable(tableName string, columns []string, types []*ColumnTyp
 }
 
 func (m *Sql) CreateTableNoHashOrKey(tableName string, columns []string, types []*ColumnTypeSimplified) error {
+
 	//fields := strings.Split(header, ",")
 	sql := " CREATE TABLE `" + tableName + "` ("
 	for i, f := range columns {
