@@ -1023,12 +1023,15 @@ func (m *Sql) DropTable(tableName string) error {
 
 func (m *Sql) columnDefinitionStringBasedOnType(c string, t *ColumnTypeSimplified) string {
 	l := t.Length
+	dbType := t.DBType
+
 	if l == 0 {
 		l = 100
 	}
 
 	if l > 1024 {
-		l = 1024
+		//l = 1024
+		dbType = "TEXT"
 	}
 
 	if strings.Contains(c, "url") && l < 255 {
@@ -1043,7 +1046,7 @@ func (m *Sql) columnDefinitionStringBasedOnType(c string, t *ColumnTypeSimplifie
 	// 	s = 5
 	// }
 
-	switch t.DBType {
+	switch dbType {
 	case "DATETIME":
 		fallthrough
 	case "DATE":
